@@ -11,9 +11,11 @@ import (
 	"io"
 	"io/ioutil"
 	"net/http"
+	"os"
 	"time"
 
-	"github.com/gorilla/mux"
+	//"MyPackges/crypt"
+
 	"github.com/maxchagin/go-memorycache-example"
 )
 
@@ -64,11 +66,12 @@ func Encrypt(Result []byte) ([]byte, []byte, []byte) {
 }
 
 func Content() []byte {
-	r := mux.NewRouter()
+	xmlFile, err := os.Open("progect.xml")
+	if err != nil {
+		fmt.Println(err)
+	}
 
-	r.Host("https://iss.moex.com/iss/history/engines/stock/markets/shares/boards/tqbr/securities.xml")
-
-	r.Headers("X-Requested-With", "XMLHttpsRequest")
+	defer xmlFile.Close()
 
 	ByteValue, _ := ioutil.ReadAll(r)
 
