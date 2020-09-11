@@ -11,7 +11,6 @@ import (
 	"io"
 	"io/ioutil"
 	"net/http"
-	"os"
 	"time"
 
 	//"MyPackges/crypt"
@@ -65,18 +64,33 @@ func Encrypt(Result []byte) ([]byte, []byte, []byte) {
 	return Ciphertext, Key, Nonce
 }
 
+func getXML(url string) ([]byte, error) {
+	resp, err := http.Get(url)
+	if err != nil {
+		return []byte{}, fmt.Errorf("GET error: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return []byte{}, fmt.Errorf("Status error: %v", resp.StatusCode)
+	}
+
+	data, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return []byte{}, fmt.Errorf("Read body: %v", err)
+	}
+
+	return data, nil
+}
+
 func Content() []byte {
-	xmlFile, err := os.Open("progect.xml")
+	xmlFile, err := getXML("https://iss.moex.com/iss/history/engines/stock/markets/shares/boards/tqbr/securities.xml")
 	if err != nil {
 		fmt.Println(err)
 	}
 
-	defer xmlFile.Close()
-
-	ByteValue, _ := ioutil.ReadAll(xmlFile)
-
 	data := &Courses{}
-	err = xml.Unmarshal(ByteValue, data)
+	err = xml.Unmarshal(xmlFile, data)
 	if nil != err {
 		fmt.Println("Error unmarshalling from XML", err)
 		panic(err)
