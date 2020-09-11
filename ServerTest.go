@@ -73,16 +73,16 @@ func Content() []byte {
 
 	defer xmlFile.Close()
 
-	ByteValue, _ := ioutil.ReadAll(r)
+	ByteValue, _ := ioutil.ReadAll(xmlFile)
 
 	data := &Courses{}
-	err := xml.Unmarshal(ByteValue, data)
+	err = xml.Unmarshal(ByteValue, data)
 	if nil != err {
 		fmt.Println("Error unmarshalling from XML", err)
 		panic(err)
 	}
 
-	Result, err := json.MarshalIndent(data, "", "\t")
+	Result, err := json.MarshalIndent(data.Data[0], "", "\t")
 	if nil != err {
 		fmt.Println("Error marshalling to JSON", err)
 		panic(err)
