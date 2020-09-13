@@ -11,10 +11,21 @@ import (
 	"io"
 	"io/ioutil"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/maxchagin/go-memorycache-example"
 )
+
+var (
+	LastResult *Courses
+	rw         sync.RWMutex
+)
+
+type encryptReq struct {
+	Text string `json:"text"`
+	Key  string `json:"key"`
+}
 
 // Структура xml файла
 type Courses struct {
@@ -48,51 +59,49 @@ type Courses struct {
 }
 
 // Метод дешифровки
-func Decrypt(CriptResult interface{}, Key []byte, Nonce []byte) []byte {
+// func Decrypt(CriptResult interface{}) []byte {
 
-	CriptText, _ := CriptResult.([]byte)
+// 	CriptText, _ := CriptResult.([]byte)
 
-	block, err := aes.NewCipher(Key)
-	if err != nil {
-		panic(err.Error())
-	}
+// 	block, err := aes.NewCipher(Key)
+// 	if err != nil {
+// 		panic(err)
+// 	}
 
-	Aesgcm, err := cipher.NewGCM(block)
-	if err != nil {
-		panic(err.Error())
-	}
+// 	Aesgcm, err := cipher.NewGCM(block)
+// 	if err != nil {
+// 		panic(err)
+// 	}
 
-	Result, err := Aesgcm.Open(nil, Nonce, CriptText, nil)
-	if err != nil {
-		panic(err.Error())
-	}
+// 	Result, err := Aesgcm.Open(nil, Nonce, CriptText, nil)
+// 	if err != nil {
+// 		panic(err)
+// 	}
 
-	return Result
-}
+// 	return Result
+// }
 
 // Метод шифровки
-func Encrypt(Result []byte) ([]byte, []byte, []byte) {
-	Key, _ := hex.DecodeString("6368616e676520746869732070617373776f726420746f206120736563726574")
-
+func Encrypt(Result []byte, Key []byte) []byte {
 	Block, err := aes.NewCipher(Key)
 	if err != nil {
-		panic(err.Error())
+		panic(err)
 	}
 
 	Nonce := make([]byte, 12)
 	_, err = io.ReadFull(rand.Reader, Nonce)
 	if err != nil {
-		panic(err.Error())
+		panic(err)
 	}
 
 	Aesgcm, err := cipher.NewGCM(Block)
 	if err != nil {
-		panic(err.Error())
+		panic(err)
 	}
 
 	Ciphertext := Aesgcm.Seal(nil, Nonce, Result, nil)
 
-	return Ciphertext, Key, Nonce
+	return Ciphertext
 }
 
 // Метод получения данных с сайта
@@ -116,47 +125,80 @@ func getXML(url string) ([]byte, error) {
 }
 
 // Метод обработки данных в Json
-func Content() []byte {
-	xmlFile, err := getXML("https://iss.moex.com/iss/history/engines/stock/markets/shares/boards/tqbr/securities.xml")
-	if err != nil {
-		fmt.Println(err)
-	}
+func Content() {
+	for {
+		xmlFile, err := getXML("https://iss.moex.com/iss/history/engines/stock/markets/shares/boards/tqbr/securities.xml")
+		if err != nil {
+			fmt.Println(err)
+			panic(err)
+		}
 
-	data := &Courses{}
-	err = xml.Unmarshal(xmlFile, data)
-	if nil != err {
-		fmt.Println("Error unmarshalling from XML", err)
-		panic(err)
-	}
+		data := &Courses{}
+		err = xml.Unmarshal(xmlFile, data)
+		if nil != err {
+			fmt.Println("Error unmarshalling from XML", err)
+			panic(err)
+		}
 
-	Result, err := json.MarshalIndent(data.Data[0], "", "\t")
-	if nil != err {
-		fmt.Println("Error marshalling to JSON", err)
-		panic(err)
-	}
+		rw.Lock()
+		LastResult = data
+		rw.Unlock()
 
-	return Result
+		<-time.After(5 * time.Second)
+	}
 }
 
 func main() {
 
 	Cache := memorycache.New(5*time.Minute, 10*time.Minute)
 
-	var Key, Nonce []byte
+	go Content()
+
+	http.HandleFunc("/encrypt", func(w http.ResponseWriter, r *http.Request) {
+
+		w.Header().Add("Content-Type", "application/json")
+
+		if r.Body == nil {
+			w.WriteHeader(500)
+			return
+		}
+
+		var req encryptReq
+		data, err := ioutil.ReadAll(r.Body)
+		if err != nil {
+			panic(err)
+		}
+		json.Unmarshal(data, &req)
+
+		key, err := hex.DecodeString(req.Key)
+		if err != nil {
+			panic(err)
+		}
+
+		output := Encrypt([]byte(req.Text), key)
+
+		Cache.Set("myKey", output, 5*time.Minute)
+
+	})
 
 	http.HandleFunc("/courses", func(w http.ResponseWriter, r *http.Request) {
 
 		w.Header().Add("Content-Type", "application/json")
+		// Result, err := json.MarshalIndent(LastResult.Data[0], "", "\t")
 
+		// if nil != err {
+		// 	fmt.Println("Error marshalling to JSON", err)
+		// 	return
+		// }
 		CriptResult, err := Cache.Get("myKey")
-
 		if !err {
-			CriptResult, Key, Nonce = Encrypt(Content())
-			Cache.Set("myKey", CriptResult, 5*time.Minute)
+			fmt.Fprintf(w, "ошибка")
 		}
-
-		fmt.Fprintf(w, "%s\n", Decrypt(CriptResult, Key, Nonce))
-
+		if CriptResult == nil {
+			fmt.Fprintf(w, "Хуй")
+		} else {
+			w.Write(CriptResult.([]byte))
+		}
 	})
 	http.ListenAndServe(":8080", nil)
 }
