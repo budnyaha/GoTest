@@ -173,6 +173,7 @@ func main() {
 		output := Encrypt([]byte(req.Text), key)
 		w.Write(output)
 	})
+
 	http.HandleFunc("/decrypt", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Add("Content-Type", "application/json")
 		if r.Body == nil {
@@ -191,7 +192,7 @@ func main() {
 		if err != nil {
 			panic(err)
 		}
-		output := Encrypt([]byte(req.Text), key)
+		output := Decrypt([]byte(req.Text), key)
 		w.Write(output)
 
 	})
