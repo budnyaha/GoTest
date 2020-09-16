@@ -4,11 +4,16 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
+	"io"
+
+	// "crypto/rand"
+
 	"encoding/hex"
 	"encoding/json"
 	"encoding/xml"
 	"fmt"
-	"io"
+
+	// "io"
 	"io/ioutil"
 	"net/http"
 	"sync"
@@ -20,11 +25,12 @@ import (
 var (
 	LastResult *Courses
 	rw         sync.RWMutex
+	Nonce, _   = hex.DecodeString("64a9433eae7ccceee2fc0eda")
 )
 
 type encryptReq struct {
-	Text string `json:"text"`
-	Key  string `json:"key"`
+	Text string `json:Text`
+	Key  string `json:"Key"`
 }
 
 // Структура xml файла
@@ -59,53 +65,64 @@ type Courses struct {
 }
 
 // Метод дешифровки
-// func Decrypt(CriptResult interface{}) []byte {
+func Decrypt(cryptoText []byte, key []byte) []byte {
 
-// 	CriptText, _ := CriptResult.([]byte)
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		panic(err)
+	}
 
-// 	block, err := aes.NewCipher(Key)
-// 	if err != nil {
-// 		panic(err)
-// 	}
+	// The IV needs to be unique, but not secure. Therefore it's common to
+	// include it at the beginning of the cryptoText.
+	if len(cryptoText) < aes.BlockSize {
+		panic("cryptoText too short")
+	}
+	iv := cryptoText[:aes.BlockSize]
+	cryptoText = cryptoText[aes.BlockSize:]
 
-// 	Aesgcm, err := cipher.NewGCM(block)
-// 	if err != nil {
-// 		panic(err)
-// 	}
+	stream := cipher.NewCFBDecrypter(block, iv)
 
-// 	Result, err := Aesgcm.Open(nil, Nonce, CriptText, nil)
-// 	if err != nil {
-// 		panic(err)
-// 	}
+	// XORKeyStream can work in-place if the two arguments are the same.
+	stream.XORKeyStream(cryptoText, cryptoText)
 
-// 	return Result
-// }
+	return cryptoText
+}
 
 // Метод шифровки
 func Encrypt(Result []byte, Key []byte) []byte {
-	Block, err := aes.NewCipher(Key)
+	plaintext := []byte(Result)
+
+	block, err := aes.NewCipher(Key)
 	if err != nil {
 		panic(err)
 	}
 
-	Nonce := make([]byte, 12)
-	_, err = io.ReadFull(rand.Reader, Nonce)
-	if err != nil {
+	Сiphertext := make([]byte, aes.BlockSize+len(plaintext))
+	iv := Сiphertext[:aes.BlockSize]
+	if _, err := io.ReadFull(rand.Reader, iv); err != nil {
 		panic(err)
 	}
 
-	Aesgcm, err := cipher.NewGCM(Block)
-	if err != nil {
-		panic(err)
-	}
+	stream := cipher.NewCFBEncrypter(block, iv)
+	stream.XORKeyStream(Сiphertext[aes.BlockSize:], plaintext)
 
-	Ciphertext := Aesgcm.Seal(nil, Nonce, Result, nil)
-
-	return Ciphertext
+	return Сiphertext
 }
 
 // Метод получения данных с сайта
 func getXML(url string) ([]byte, error) {
+	/*
+		formData := url.Values{
+			"Result": content_XML,
+			"Key": "dasdadawqeqw"
+		}
+
+		resp, err := http.PostForm("http://localhost/encrypt", formData)
+		if err != nil {
+			fmt.Println(err)
+		}
+	*/
+
 	resp, err := http.Get(url)
 	if err != nil {
 		return []byte{}, fmt.Errorf("GET error: %v", err)
@@ -155,9 +172,6 @@ func main() {
 	go Content()
 
 	http.HandleFunc("/encrypt", func(w http.ResponseWriter, r *http.Request) {
-
-		w.Header().Add("Content-Type", "application/json")
-
 		if r.Body == nil {
 			w.WriteHeader(500)
 			return
@@ -174,29 +188,65 @@ func main() {
 		if err != nil {
 			panic(err)
 		}
-
 		output := Encrypt([]byte(req.Text), key)
-
-		fmt.Println(output)
-
+		w.Write(output)
 	})
-
-	http.HandleFunc("/courses", func(w http.ResponseWriter, r *http.Request) {
+	http.HandleFunc("/decrypt", func(w http.ResponseWriter, r *http.Request) {
 
 		w.Header().Add("Content-Type", "application/json")
-		Result, err := json.MarshalIndent(LastResult.Data[0], "", "\t")
-		Cache.Set("myKey", Result, 5*time.Minute)
 
-		if nil != err {
-			fmt.Println("Error marshalling to JSON", err)
+		if r.Body == nil {
+			w.WriteHeader(500)
 			return
 		}
-		CriptResult, _ := Cache.Get("myKey")
+
+		var req encryptReq
+		data, err := ioutil.ReadAll(r.Body)
 		if err != nil {
-			fmt.Fprintf(w, "ошибка")
-		} else {
-			w.Write(CriptResult.([]byte))
+			panic(err)
 		}
+		json.Unmarshal(data, &req)
+
+		Key, err := hex.DecodeString(req.Key)
+		if err != nil {
+			panic(err)
+		}
+
+		// cryptoText, _ := base64.URLEncoding.DecodeString(req.Text)
+		// fmt.Println(len(cryptoText))
+		// fmt.Printf("%x\n", cryptoText)
+
+		output, _ := Cache.Get("myKey")
+
+		output2 := output.([]byte)
+
+		fmt.Println(len(output2))
+		fmt.Printf("%x\n", output2)
+
+		// fmt.Printf("%s\n", output)
+		output2 = Decrypt(output2, Key)
+
+		fmt.Println("%s\n", output2)
+		// Cache.Set("myKey", output, 5*time.Minute)
+
 	})
+
+	// http.HandleFunc("/courses", func(w http.ResponseWriter, r *http.Request) {
+
+	// 	w.Header().Add("Content-Type", "application/json")
+	// 	// Result, err := json.MarshalIndent(LastResult.Data[0], "", "\t")
+
+	// 	// if nil != err {
+	// 	// 	fmt.Println("Error marshalling to JSON", err)
+	// 	// 	return
+	// 	// }
+	// 	CriptResult, err := Cache.Get("yagovnoed")
+
+	// 	if !err {
+	// 		fmt.Fprintf(w, "ошибка") // Не существует в кэше
+	// 	} else {
+	// 		w.Write(CriptResult.([]byte))
+	// 	}
+	// })
 	http.ListenAndServe(":8080", nil)
 }
