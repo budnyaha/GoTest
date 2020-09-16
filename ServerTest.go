@@ -177,25 +177,23 @@ func main() {
 
 		output := Encrypt([]byte(req.Text), key)
 
-		Cache.Set("myKey", output, 5*time.Minute)
+		fmt.Println(output)
 
 	})
 
 	http.HandleFunc("/courses", func(w http.ResponseWriter, r *http.Request) {
 
 		w.Header().Add("Content-Type", "application/json")
-		// Result, err := json.MarshalIndent(LastResult.Data[0], "", "\t")
+		Result, err := json.MarshalIndent(LastResult.Data[0], "", "\t")
+		Cache.Set("myKey", Result, 5*time.Minute)
 
-		// if nil != err {
-		// 	fmt.Println("Error marshalling to JSON", err)
-		// 	return
-		// }
-		CriptResult, err := Cache.Get("myKey")
-		if !err {
-			fmt.Fprintf(w, "ошибка")
+		if nil != err {
+			fmt.Println("Error marshalling to JSON", err)
+			return
 		}
-		if CriptResult == nil {
-			fmt.Fprintf(w, "Хуй")
+		CriptResult, _ := Cache.Get("myKey")
+		if err != nil {
+			fmt.Fprintf(w, "ошибка")
 		} else {
 			w.Write(CriptResult.([]byte))
 		}
