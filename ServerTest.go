@@ -83,21 +83,20 @@ func Decrypt(cryptoText []byte, key []byte) []byte {
 
 // Метод шифровки
 func Encrypt(Result []byte, Key []byte) []byte {
-	plaintext := []byte(Result)
 
 	block, err := aes.NewCipher(Key)
 	if err != nil {
 		panic(err)
 	}
 
-	Сiphertext := make([]byte, aes.BlockSize+len(plaintext))
+	Сiphertext := make([]byte, aes.BlockSize+len(Result))
 	iv := Сiphertext[:aes.BlockSize]
 	if _, err := io.ReadFull(rand.Reader, iv); err != nil {
 		panic(err)
 	}
 
 	stream := cipher.NewCFBEncrypter(block, iv)
-	stream.XORKeyStream(Сiphertext[aes.BlockSize:], plaintext)
+	stream.XORKeyStream(Сiphertext[aes.BlockSize:], Result)
 
 	return Сiphertext
 }
